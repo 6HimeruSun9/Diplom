@@ -18,6 +18,7 @@ DATABASES = {
         'PORT': '5432',      
     }
 }
+
 Выполнить миграции:
 python manage.py migrate
 
