@@ -1,0 +1,31 @@
+{% extends 'lessons/base.html' %}
+
+{% block title %}{{ section.name }}{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">{{ section.name }}</h1>
+<p>{{ section.description|default:"Выберите урок для изучения." }}</p>
+
+<div class="row">
+    {% for lesson in lessons %}
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h3 class="card-title">{{ lesson.title }}</h3>
+                <p class="card-text text-muted">
+                    {% if user.is_authenticated and lesson.is_completed_by %}
+                        Пройден
+                    {% else %}
+                        {% if user.is_authenticated %}Не пройден{% else %}Войдите для сохранения прогресса{% endif %}
+                    {% endif %}
+                </p>
+                <a href="{% url 'lesson_detail' lesson.id %}" class="btn btn-success">Изучить</a>
+                <a href="{% url 'test' lesson.id %}" class="btn btn-outline-success">Тест</a>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12"><div class="alert alert-info">В разделе пока нет уроков.</div></div>
+    {% endfor %}
+</div>
+{% endblock %}

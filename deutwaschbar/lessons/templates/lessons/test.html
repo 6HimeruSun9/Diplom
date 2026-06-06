@@ -1,0 +1,307 @@
+{% extends 'lessons/base.html' %}
+{% load static %}
+
+{% block title %}Тест: {{ lesson.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Тест: {{ lesson.title }}</h2>
+        <div class="text-muted" id="questionCounter">Вопрос 1 из {{ questions|length }}</div>
+    </div>
+    <div class="progress mb-4" style="height: 10px;">
+        <div id="testProgress" class="progress-bar bg-success" style="width: 0%"></div>
+    </div>
+    <div id="test-container"></div>
+</div>
+
+<script type="application/json" id="test-questions-data">
+{{ questions_json|safe }}
+</script>
+
+<script>
+    const questionsDataElem = document.getElementById('test-questions-data');
+    let questionsData = [];
+    try {
+        questionsData = JSON.parse(questionsDataElem.textContent);
+        console.log('Загружено вопросов:', questionsData.length);
+    } catch(e) {
+        console.error('Ошибка парсинга JSON:', e);
+        document.getElementById('test-container').innerHTML = '<div class="alert alert-danger">Ошибка загрузки вопросов.</div>';
+    }
+    const lessonId = {{ lesson.id }};
+    const csrfToken = "{{ csrf_token }}";
+
+    class SimpleDragDrop {
+        constructor(containerId, wordsList, correctOrder, onUpdate) {
+            this.container = document.getElementById(containerId);
+            this.wordsList = [...wordsList];
+            this.correctOrder = [...correctOrder];
+            this.userOrder = [];
+            this.onUpdate = onUpdate;
+            this.render();
+        }
+        render() {
+            if (!this.container) return;
+            const available = this.wordsList.filter(w => !this.userOrder.includes(w));
+            this.container.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card"><div class="card-header bg-success text-white">Слова</div>
+                        <div class="card-body" id="pool-${this.container.id}"></div></div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card"><div class="card-header bg-success text-white">Ваш порядок</div>
+                        <div class="card-body" id="order-${this.container.id}" style="min-height:100px; background:#f0fff0;"></div></div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-secondary btn-sm mt-2" id="reset-${this.container.id}">Сбросить</button>
+                <button class="btn btn-success btn-sm mt-2 ms-2" id="check-${this.container.id}">Проверить</button>
+                <div id="msg-${this.container.id}"></div>
+            `;
+            const poolDiv = document.getElementById(`pool-${this.container.id}`);
+            const orderDiv = document.getElementById(`order-${this.container.id}`);
+            available.forEach(word => {
+                const span = document.createElement('span');
+                span.innerText = word;
+                span.className = 'badge bg-secondary p-2 m-1';
+                span.style.cursor = 'grab';
+                span.draggable = true;
+                span.ondragstart = (e) => e.dataTransfer.setData('text/plain', word);
+                poolDiv.appendChild(span);
+            });
+            this.userOrder.forEach(word => {
+                const span = document.createElement('span');
+                span.innerText = word;
+                span.className = 'badge bg-success p-2 m-1';
+                span.style.cursor = 'pointer';
+                span.onclick = () => {
+                    this.userOrder = this.userOrder.filter(w => w !== word);
+                    if (this.onUpdate) this.onUpdate(this.userOrder);
+                    this.render();
+                };
+                orderDiv.appendChild(span);
+            });
+            if (this.userOrder.length === 0) orderDiv.innerHTML = '<div class="text-muted">Перетащите слова сюда...</div>';
+            orderDiv.ondragover = (e) => e.preventDefault();
+            orderDiv.ondrop = (e) => {
+                e.preventDefault();
+                const word = e.dataTransfer.getData('text/plain');
+                if (word && !this.userOrder.includes(word)) {
+                    this.userOrder.push(word);
+                    if (this.onUpdate) this.onUpdate(this.userOrder);
+                    this.render();
+                }
+            };
+            document.getElementById(`reset-${this.container.id}`).onclick = () => {
+                this.userOrder = [];
+                if (this.onUpdate) this.onUpdate(this.userOrder);
+                this.render();
+            };
+            document.getElementById(`check-${this.container.id}`).onclick = () => {
+                const isCorrect = (this.userOrder.length === this.correctOrder.length &&
+                    this.userOrder.every((v,i) => v === this.correctOrder[i]));
+                const msgDiv = document.getElementById(`msg-${this.container.id}`);
+                if (isCorrect) {
+                    msgDiv.innerHTML = '<div class="alert alert-success mt-2">Правильно!</div>';
+                } else {
+                    msgDiv.innerHTML = `<div class="alert alert-danger mt-2">Неправильно. Правильный порядок: ${this.correctOrder.join(' → ')}</div>`;
+                }
+                setTimeout(() => msgDiv.innerHTML = '', 2000);
+            };
+        }
+    }
+
+    class TestManager {
+        constructor(questions, lessonId, csrfToken) {
+            this.questions = questions;
+            this.lessonId = lessonId;
+            this.csrfToken = csrfToken;
+            this.current = 0;
+            this.answers = {};
+            this.loadProgress();
+            this.render();
+        }
+        loadProgress() {
+            const saved = localStorage.getItem(`test_${this.lessonId}`);
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    this.current = data.current || 0;
+                    this.answers = data.answers || {};
+                } catch(e) {}
+            }
+        }
+        saveProgress() {
+            localStorage.setItem(`test_${this.lessonId}`, JSON.stringify({
+                current: this.current,
+                answers: this.answers
+            }));
+        }
+        clearProgress() {
+            localStorage.removeItem(`test_${this.lessonId}`);
+        }
+        escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+        render() {
+            const container = document.getElementById('test-container');
+            if (!container) return;
+            if (this.current >= this.questions.length) {
+                this.submit();
+                return;
+            }
+            const q = this.questions[this.current];
+            const saved = this.answers[q.id];
+            let html = `
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white"><h4>Вопрос ${this.current+1} из ${this.questions.length}</h4></div>
+                    <div class="card-body">
+                        <h5>${this.escapeHtml(q.text)}</h5>
+                        <div id="answer-area"></div>
+                    </div>
+                    <div class="card-footer d-flex justify-content-between">
+                        <button class="btn btn-secondary" id="prevBtn" ${this.current===0?'disabled':''}>Назад</button>
+                        <button class="btn btn-success" id="nextBtn">${this.current+1===this.questions.length?'Завершить':'Далее'}</button>
+                    </div>
+                </div>
+            `;
+            container.innerHTML = html;
+            const answerArea = document.getElementById('answer-area');
+            if (q.type === 'choice') {
+                answerArea.innerHTML = q.options.map(opt => `
+                    <div class="choice-option p-2 border rounded mb-2" data-id="${opt.id}" style="cursor:pointer;">
+                        <input type="radio" name="choice" value="${opt.id}" id="opt_${opt.id}" ${saved==opt.id?'checked':''}>
+                        <label for="opt_${opt.id}">${this.escapeHtml(opt.text)}</label>
+                    </div>
+                `).join('');
+                // Обработчики
+                document.querySelectorAll('.choice-option').forEach(div => {
+                    div.addEventListener('click', (e) => {
+                        if (e.target.type !== 'radio') {
+                            const radio = div.querySelector('input[type="radio"]');
+                            if (radio) radio.checked = true;
+                        }
+                        const radio = div.querySelector('input[type="radio"]');
+                        if (radio && radio.checked) {
+                            this.answers[q.id] = parseInt(radio.value);
+                            this.saveProgress();
+                        }
+                    });
+                    const radio = div.querySelector('input[type="radio"]');
+                    if (radio) radio.addEventListener('change', () => {
+                        if (radio.checked) {
+                            this.answers[q.id] = parseInt(radio.value);
+                            this.saveProgress();
+                        }
+                    });
+                });
+            } else if (q.type === 'text') {
+                answerArea.innerHTML = `<input type="text" class="form-control" id="textInput" value="${this.escapeHtml(saved||'')}" placeholder="Введите ответ">`;
+                document.getElementById('textInput').addEventListener('input', (e) => {
+                    this.answers[q.id] = e.target.value;
+                    this.saveProgress();
+                });
+            } else if (q.type === 'order') {
+                const containerId = `order-${Date.now()}-${q.id}`;
+                answerArea.innerHTML = `<div id="${containerId}"></div>`;
+                const wordsList = q.words || (q.correct_order ? q.correct_order.split(',') : []);
+                const correct = q.correct_order ? q.correct_order.split(',') : [];
+                const savedOrder = saved || [];
+                const dragDrop = new SimpleDragDrop(containerId, wordsList, correct, (order) => {
+                    this.answers[q.id] = order;
+                    this.saveProgress();
+                });
+                if (savedOrder.length) {
+                    dragDrop.userOrder = [...savedOrder];
+                    dragDrop.render();
+                }
+            }
+            const percent = (this.current / this.questions.length) * 100;
+            const progBar = document.getElementById('testProgress');
+            
+            if (progBar) progBar.style.width = `${percent}%`;
+            const qCounter = document.getElementById('questionCounter');
+            if (qCounter) qCounter.innerText = `Вопрос ${this.current+1} из ${this.questions.length}`;
+
+            document.getElementById('prevBtn').onclick = () => {
+                if (this.current > 0) this.current--;
+                this.saveProgress();
+                this.render();
+            };
+            document.getElementById('saveBtn').onclick = () => {
+                alert('Прогресс сохранён');
+            };
+            document.getElementById('nextBtn').onclick = () => {
+                const qCur = this.questions[this.current];
+                if (!this.answers[qCur.id]) {
+                    alert('Пожалуйста, ответьте на вопрос');
+                    return;
+                }
+                if (qCur.type === 'text') {
+                    this.answers[qCur.id] = (this.answers[qCur.id] || '').trim().toLowerCase();
+                    this.saveProgress();
+                }
+                if (this.current + 1 < this.questions.length) {
+                    this.current++;
+                    this.saveProgress();
+                    this.render();
+                } else {
+                    this.submit();
+                }
+            };
+        }
+        async submit() {
+            const container = document.getElementById('test-container');
+            container.innerHTML = '<div class="text-center">Отправка результатов...</div>';
+            try {
+                const response = await fetch(`/test/${this.lessonId}/submit/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': this.csrfToken
+                    },
+                    body: JSON.stringify({ answers: this.answers })
+                });
+                const data = await response.json();
+                if (data.score !== undefined) {
+                    this.clearProgress();
+                    const passed = data.is_passed;
+                    container.innerHTML = `
+                        <div class="card text-center">
+                            <div class="card-header bg-${passed ? 'success' : 'danger'} text-white">
+                                <h3>${passed ? 'Тест пройден!' : 'Тест не пройден'}</h3>
+                            </div>
+                            <div class="card-body">
+                                <h2 class="display-1">${data.score}%</h2>
+                                <p>Правильных ответов: ${data.correct_answers} из ${data.total_questions}</p>
+                                <a href="/lesson/${this.lessonId}/" class="btn btn-success">Вернуться к уроку</a>
+                                <a href="/profile/" class="btn btn-secondary">Моя статистика</a>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = '<div class="alert alert-danger">Ошибка сохранения результатов</div>';
+                }
+            } catch(e) {
+                console.error(e);
+                container.innerHTML = '<div class="alert alert-danger">Ошибка соединения</div>';
+            }
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (questionsData && questionsData.length > 0) {
+            new TestManager(questionsData, lessonId, csrfToken);
+        } else {
+            document.getElementById('test-container').innerHTML = '<div class="alert alert-warning">Нет вопросов для этого теста.</div>';
+        }
+    });
+</script>
+{% endblock %}

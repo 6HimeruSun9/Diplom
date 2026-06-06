@@ -1,0 +1,17 @@
+{% extends 'lessons/base.html' %}
+
+{% block title %}{{ lesson.title }}{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">{{ lesson.title }}</h1>
+
+<div class="card">
+    <div class="card-body">
+        {{ lesson.theory|safe|linebreaks }}
+    </div>
+</div>
+<div class="mt-4">
+    <a href="{% url 'test' lesson.id %}" class="btn btn-success btn-lg">Пройти тест</a>
+    <a href="{% url 'index' %}" class="btn btn-secondary">Вернуться к разделам</a>
+</div>
+{% endblock %}

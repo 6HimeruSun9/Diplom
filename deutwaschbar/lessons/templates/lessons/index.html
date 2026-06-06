@@ -1,0 +1,33 @@
+{% extends 'lessons/base.html' %}
+
+{% block title %}Главная{% endblock %}
+
+{% block content %}
+<h1 class="text-center mb-4">Изучаем немецкий язык с нуля</h1>
+
+<div class="row">
+    {% for item in sections_with_progress %}
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body">
+                <h3 class="card-title">{{ item.section.name }}</h3>
+                <p class="card-text text-muted">{{ item.section.description|default:"Изучайте немецкий язык" }}</p>
+                <div class="progress mb-3">
+                    <div class="progress-bar bg-success" style="width: {{ item.progress }}%"></div>
+                </div>
+                <p class="small text-muted">{{ item.lessons_count }} уроков | Прогресс: {{ item.progress }}%</p>
+                {% if item.lessons_count > 0 %}
+                    <a href="{% url 'section_detail' item.section.id %}" class="btn btn-outline-success w-100">Начать обучение</a>
+                {% else %}
+                    <button class="btn btn-outline-secondary w-100" disabled>Нет уроков</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <div class="alert alert-info">Разделы пока не добавлены. Зайдите в админ-панель для добавления.</div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

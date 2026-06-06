@@ -1,0 +1,81 @@
+{% extends 'lessons/base.html' %}
+
+{% block title %}Мой прогресс{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Мой прогресс</h1>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h2 class="text-success">{{ total_lessons }}</h2>
+                <p class="text-muted">Пройдено тестов</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h2 class="text-success">{{ avg_score }}%</h2>
+                <p class="text-muted">Средний балл</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center">
+            <div class="card-body">
+                <h2 class="text-success">{{ passed_lessons }}</h2>
+                <p class="text-muted">Успешно сдано</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h3 class="mb-3">Прогресс по разделам</h3>
+{% for section in sections_progress %}
+<div class="mb-3">
+    <div class="d-flex justify-content-between mb-1">
+        <span>{{ section.section.name }}</span>
+        <span>{{ section.progress }}% ({{ section.completed }}/{{ section.total }})</span>
+    </div>
+    <div class="progress">
+        <div class="progress-bar bg-success" style="width: {{ section.progress }}%"></div>
+    </div>
+</div>
+{% endfor %}
+
+<h3 class="mt-5 mb-3">История результатов</h3>
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Урок</th>
+                <th>Результат</th>
+                <th>Статус</th>
+                <th>Дата</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for result in test_results %}
+            <tr>
+                <td>{{ result.lesson.title }}</td>
+                <td>{{ result.score }}%</td>
+                <td>
+                    {% if result.is_passed %}
+                        <span class="badge bg-success">Пройден</span>
+                    {% else %}
+                        <span class="badge bg-warning">Не пройден</span>
+                    {% endif %}
+                </td>
+                <td>{{ result.created_at|date:"d.m.Y H:i" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="text-center">Пока нет результатов. Пройдите первый урок</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
