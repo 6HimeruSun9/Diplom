@@ -181,7 +181,6 @@
                         <label for="opt_${opt.id}">${this.escapeHtml(opt.text)}</label>
                     </div>
                 `).join('');
-                // Обработчики
                 document.querySelectorAll('.choice-option').forEach(div => {
                     div.addEventListener('click', (e) => {
                         if (e.target.type !== 'radio') {
@@ -230,32 +229,35 @@
             const qCounter = document.getElementById('questionCounter');
             if (qCounter) qCounter.innerText = `Вопрос ${this.current+1} из ${this.questions.length}`;
 
-            document.getElementById('prevBtn').onclick = () => {
-                if (this.current > 0) this.current--;
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            if (prevBtn) {
+                prevBtn.onclick = () => {
+            if (this.current > 0) this.current--;
+            this.saveProgress();
+            this.render();
+        };
+    }
+    if (nextBtn) {
+        nextBtn.onclick = () => {
+            const qCur = this.questions[this.current];
+            if (!this.answers[qCur.id]) {
+                alert('Пожалуйста, ответьте на вопрос');
+                return;
+            }
+            if (qCur.type === 'text') {
+                this.answers[qCur.id] = (this.answers[qCur.id] || '').trim().toLowerCase();
+                this.saveProgress();
+            }
+            if (this.current + 1 < this.questions.length) {
+                this.current++;
                 this.saveProgress();
                 this.render();
-            };
-            document.getElementById('saveBtn').onclick = () => {
-                alert('Прогресс сохранён');
-            };
-            document.getElementById('nextBtn').onclick = () => {
-                const qCur = this.questions[this.current];
-                if (!this.answers[qCur.id]) {
-                    alert('Пожалуйста, ответьте на вопрос');
-                    return;
-                }
-                if (qCur.type === 'text') {
-                    this.answers[qCur.id] = (this.answers[qCur.id] || '').trim().toLowerCase();
-                    this.saveProgress();
-                }
-                if (this.current + 1 < this.questions.length) {
-                    this.current++;
-                    this.saveProgress();
-                    this.render();
-                } else {
-                    this.submit();
-                }
-            };
+            } else {
+                this.submit();
+            }
+        };
+    }
         }
         async submit() {
             const container = document.getElementById('test-container');
